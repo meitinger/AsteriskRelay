@@ -1,0 +1,267 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Configuration_AlreadyInitialized" xml:space="preserve">
+    <value>The object has already been initialized.</value>
+  </data>
+  <data name="Configuration_BoardError" xml:space="preserve">
+    <value>Board #{0} configuration error: {1}</value>
+  </data>
+  <data name="Configuration_DuplicateBoardAdddress" xml:space="preserve">
+    <value>More than one board have been defined at address {1} on port {0}.</value>
+  </data>
+  <data name="Configuration_DuplicateSwitchName" xml:space="preserve">
+    <value>The name "{0}" is used for more than one switch.</value>
+  </data>
+  <data name="Configuration_FirstOperandError" xml:space="preserve">
+    <value>Op#1({0}): {1}</value>
+  </data>
+  <data name="Configuration_InvalidBoardAddress" xml:space="preserve">
+    <value>The boards's address must be greater than 0.</value>
+  </data>
+  <data name="Configuration_InvalidSwitchName" xml:space="preserve">
+    <value>No switch named "{0}" has been found.</value>
+  </data>
+  <data name="Configuration_MissingBoards" xml:space="preserve">
+    <value>The list of boards is missing.</value>
+  </data>
+  <data name="Configuration_MissingFirstOperand" xml:space="preserve">
+    <value>The first operand is missing.</value>
+  </data>
+  <data name="Configuration_MissingOperand" xml:space="preserve">
+    <value>The operand is missing.</value>
+  </data>
+  <data name="Configuration_MissingPortName" xml:space="preserve">
+    <value>The port name is missing.</value>
+  </data>
+  <data name="Configuration_MissingRelay" xml:space="preserve">
+    <value>The function for relay #{0} is missing.</value>
+  </data>
+  <data name="Configuration_MissingSecondOperand" xml:space="preserve">
+    <value>The seond operand is missing.</value>
+  </data>
+  <data name="Configuration_MissingSwitches" xml:space="preserve">
+    <value>The list of switches is missing.</value>
+  </data>
+  <data name="Configuration_MissingSwitchName" xml:space="preserve">
+    <value>The name of the switch is missing.</value>
+  </data>
+  <data name="Configuration_OperandError" xml:space="preserve">
+    <value>Op({0}): {1}</value>
+  </data>
+  <data name="Configuration_ReenteredInitializing" xml:space="preserve">
+    <value>The object is already being initialized.</value>
+  </data>
+  <data name="Configuration_RelayError" xml:space="preserve">
+    <value>Relay #{0}: {1}</value>
+  </data>
+  <data name="Configuration_SecondOperandError" xml:space="preserve">
+    <value>Op#2({0}): {1}</value>
+  </data>
+  <data name="Configuration_SwitchError" xml:space="preserve">
+    <value>Switch #{0} configuration error: {1}</value>
+  </data>
+  <data name="Hardware_BoardAddressOutOfRange" xml:space="preserve">
+    <value>The board #{1} on port {0} is out of range and will be ignored.</value>
+  </data>
+  <data name="Hardware_BoardConfigurationMissing" xml:space="preserve">
+    <value>No board for address #{1} on port {0} has been configured.</value>
+  </data>
+  <data name="Hardware_DifferentBoardAddress" xml:space="preserve">
+    <value>The command {1} has been sent to board #{2} on port {0} but the response originates from board #{3}.</value>
+  </data>
+  <data name="Hardware_DifferentOpCode" xml:space="preserve">
+    <value>The command {1} has been sent to board #{2} on port {0} but the response is for an op-code of {3}.</value>
+  </data>
+  <data name="Hardware_InvalidChecksum" xml:space="preserve">
+    <value>The checksum of the response to command {1} from board #{2} on port {0} is invalid.</value>
+  </data>
+  <data name="Hardware_SetupComplete" xml:space="preserve">
+    <value>The initialization of port {0} is complete.
+Number of boards connected: {1}</value>
+  </data>
+  <data name="Manager_UnknownAction" xml:space="preserve">
+    <value>The action "{2}" for switch "{1}" has been received from {0}.
+The event will be ignored because the action is unknown.</value>
+  </data>
+  <data name="Manager_UnknownSwitch" xml:space="preserve">
+    <value>A relay event for switch "{1}" has been received from {0}.
+The event will be ignored since no switch with that name is registered.</value>
+  </data>
+  <data name="Program_BackgroundTaskException" xml:space="preserve">
+    <value>The following error occured in {0}: {1}</value>
+  </data>
+  <data name="Remoting_SwitchNameRequired" xml:space="preserve">
+    <value>A switch name must be provided.</value>
+  </data>
+  <data name="Remoting_SwitchNotFound" xml:space="preserve">
+    <value>No switch named "{0}" has been configured.</value>
+  </data>
+  <data name="Hardware_BackgroundTaskName" xml:space="preserve">
+    <value>{0} Port Manager</value>
+  </data>
+  <data name="Configuration_AsteriskManagerInterfaceError" xml:space="preserve">
+    <value>Asterisk Manager Interface #{0} configuration error: {1}</value>
+  </data>
+  <data name="Configuration_DuplicateManagerBaseUri" xml:space="preserve">
+    <value>More than one Asterisk Manager Interface refer to {0}.</value>
+  </data>
+  <data name="Configuration_MalformedUri" xml:space="preserve">
+    <value>The connection parameters are invalid: {0}</value>
+  </data>
+  <data name="Configuration_MissingAsteriskManagerInterfaces" xml:space="preserve">
+    <value>The list of Asterisk Manager Interfaces is missing.</value>
+  </data>
+  <data name="Configuration_MissingDeviceNameFormat" xml:space="preserve">
+    <value>The format string for converting switch names to device names is missing.</value>
+  </data>
+  <data name="Configuration_MissingHostname" xml:space="preserve">
+    <value>The host name is missing.</value>
+  </data>
+  <data name="Configuration_MissingPassword" xml:space="preserve">
+    <value>The password is missing.</value>
+  </data>
+  <data name="Configuration_MissingUsername" xml:space="preserve">
+    <value>The user name is missing.</value>
+  </data>
+  <data name="Configuration_PortOutOfRange" xml:space="preserve">
+    <value>The port number is either less than 1 or greater than 65535.</value>
+  </data>
+  <data name="Configuration_ReadTimeoutOutOfRange" xml:space="preserve">
+    <value>The read timeout must be greater than 0.</value>
+  </data>
+  <data name="Configuration_RetryIntervalOutOfRange" xml:space="preserve">
+    <value>The retry interval must be non-negative.</value>
+  </data>
+  <data name="Configuration_SerialPortError" xml:space="preserve">
+    <value>Serial port configuration error: {0}</value>
+  </data>
+  <data name="Configuration_WriteTimeoutOutOfRange" xml:space="preserve">
+    <value>The write timeout must be greater than 0.</value>
+  </data>
+  <data name="Hardware_OperationTimedOut" xml:space="preserve">
+    <value>An I/O operation on port {0} timed out.</value>
+  </data>
+  <data name="Manager_BackgroundTaskName" xml:space="preserve">
+    <value>Asterisk Manager Connection to {0}</value>
+  </data>
+  <data name="Manager_SyncComplete" xml:space="preserve">
+    <value>The switch states have been successfully synced with {0}.</value>
+  </data>
+</root>

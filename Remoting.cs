@@ -76,7 +76,7 @@ namespace Aufbauwerk.Asterisk.Relay.Remoting
         internal static void Stop(object sender, EventArgs e)
         {
             if (host != null)
-                host.Close();
+                host.Abort();
         }
 
         private Service() { }

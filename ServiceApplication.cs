@@ -1,4 +1,4 @@
-﻿/* Copyright (C) 2012-2013, Manuel Meitinger
+﻿/* Copyright (C) 2012-2014, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -2217,6 +2217,7 @@ namespace Aufbauwerk.ServiceProcess
 
         private static readonly object initializeLock = new object();
         private static readonly object serviceLock = new object();
+        private static readonly LPHANDLER_FUNCTION_EX handlerExDelegate = new LPHANDLER_FUNCTION_EX(HandlerEx);
         private static readonly AutoResetEvent serviceMainSignal = new AutoResetEvent(false);
         private static readonly NotificationCounter<Guid> powerSettingNotifications = new NotificationCounter<Guid>();
         private static readonly NotificationCounter<IntPtr> deviceHandleNotifications = new NotificationCounter<IntPtr>();
@@ -2661,7 +2662,7 @@ namespace Aufbauwerk.ServiceProcess
                 status.WaitHint = 0;
 
                 // register the handle
-                statusHandle = RegisterServiceCtrlHandlerEx(mainServiceName, HandlerEx, IntPtr.Zero);
+                statusHandle = RegisterServiceCtrlHandlerEx(mainServiceName, handlerExDelegate, IntPtr.Zero);
                 if (statusHandle == IntPtr.Zero)
                     throw new Win32Exception();
 

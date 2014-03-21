@@ -109,24 +109,24 @@ board configuration:
 
     <setting name="Boards" serializeAs="Xml">
       <value>
-        <ArrayOfBoard xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+        <ArrayOfBoard>
           <Board>
             <Port>COM1</Port>
             <Address>1</Address>
-            <Relay1 xsi:type="SwitchRef"><Name>West</Name></Relay1>
-            <Relay2 xsi:type="SwitchRef"><Name>East</Name></Relay2>
-            <Relay3 xsi:type="Or">
-              <Op1 xsi:type="SwitchRef"><Name>Entrance</Name></Op1>
-              <Op2 xsi:type="Or">
-                <Op1 xsi:type="SwitchRef"><Name>West</Name></Op1>
-                <Op2 xsi:type="SwitchRef"><Name>East</Name></Op2>
-              </Op2>
+            <Relay1><SwitchRef>West</SwitchRef></Relay1>
+            <Relay2><SwitchRef>East</SwitchRef></Relay2>
+            <Relay3>
+              <Or>
+                <SwitchRef>Entrance</SwitchRef>
+                <SwitchRef>West</SwitchRef>
+                <SwitchRef>East</SwitchRef>
+              </Or>
             </Relay3>
-            <Relay4 xsi:type="AlwaysOff"/>
-            <Relay5 xsi:type="AlwaysOff"/>
-            <Relay6 xsi:type="AlwaysOff"/>
-            <Relay7 xsi:type="AlwaysOff"/>
-            <Relay8 xsi:type="AlwaysOff"/>
+            <Relay4><AlwaysOff/></Relay4>
+            <Relay5><AlwaysOff/></Relay5>
+            <Relay6><AlwaysOff/></Relay6>
+            <Relay7><AlwaysOff/></Relay7>
+            <Relay8><AlwaysOff/></Relay8>
           </Board>
         </ArrayOfBoard>
       </value>

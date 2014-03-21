@@ -6,4 +6,4 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyProduct("Aufbauwerk Asterisk Relay")]
 [assembly: AssemblyCopyright("Copyright © 2009-2014 by Aufbauwerk der Jugend")]
 [assembly: ComVisible(false)]
-[assembly: AssemblyVersion("1.2.0.2")]
+[assembly: AssemblyVersion("1.2.0.3")]

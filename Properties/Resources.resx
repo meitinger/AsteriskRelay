@@ -129,9 +129,6 @@
   <data name="Configuration_DuplicateSwitchName" xml:space="preserve">
     <value>The name "{0}" is used for more than one switch.</value>
   </data>
-  <data name="Configuration_FirstOperandError" xml:space="preserve">
-    <value>Op#1({0}): {1}</value>
-  </data>
   <data name="Configuration_InvalidBoardAddress" xml:space="preserve">
     <value>The boards's address must be greater than 0.</value>
   </data>
@@ -141,9 +138,6 @@
   <data name="Configuration_MissingBoards" xml:space="preserve">
     <value>The list of boards is missing.</value>
   </data>
-  <data name="Configuration_MissingFirstOperand" xml:space="preserve">
-    <value>The first operand is missing.</value>
-  </data>
   <data name="Configuration_MissingOperand" xml:space="preserve">
     <value>The operand is missing.</value>
   </data>
@@ -152,9 +146,6 @@
   </data>
   <data name="Configuration_MissingRelay" xml:space="preserve">
     <value>The function for relay #{0} is missing.</value>
-  </data>
-  <data name="Configuration_MissingSecondOperand" xml:space="preserve">
-    <value>The seond operand is missing.</value>
   </data>
   <data name="Configuration_MissingSwitches" xml:space="preserve">
     <value>The list of switches is missing.</value>
@@ -170,9 +161,6 @@
   </data>
   <data name="Configuration_RelayError" xml:space="preserve">
     <value>Relay #{0}: {1}</value>
-  </data>
-  <data name="Configuration_SecondOperandError" xml:space="preserve">
-    <value>Op#2({0}): {1}</value>
   </data>
   <data name="Configuration_SwitchError" xml:space="preserve">
     <value>Switch #{0} configuration error: {1}</value>

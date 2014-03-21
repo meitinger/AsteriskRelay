@@ -832,7 +832,7 @@ namespace Aufbauwerk.Net.Asterisk
     }
 
     /// <summary>
-    /// 
+    /// Represents an Asterisk Manager action request.
     /// </summary>
     public sealed class AsteriskAction : System.Collections.IEnumerable
     {

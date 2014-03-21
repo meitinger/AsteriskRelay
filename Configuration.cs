@@ -16,6 +16,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Configuration;
 using System.Linq;
 using System.Threading;
@@ -533,7 +534,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             get { return Boards.Values.Aggregate(Enumerable.Empty<Board>(), (acc, dict) => acc.Concat(dict.Values)); }
         }
 
-        private readonly Function[] relays = new Function[8];
+        private readonly Relay[] relays = new Relay[8];
         private string port;
         private byte address;
         private byte state;
@@ -617,7 +618,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #1.
         /// </summary>
-        public Function Relay1
+        public Relay Relay1
         {
             get { return Get(ref relays[0]); }
             set { Set(value, ref relays[0]); }
@@ -626,7 +627,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #2.
         /// </summary>
-        public Function Relay2
+        public Relay Relay2
         {
             get { return Get(ref relays[1]); }
             set { Set(value, ref relays[1]); }
@@ -635,7 +636,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #3.
         /// </summary>
-        public Function Relay3
+        public Relay Relay3
         {
             get { return Get(ref relays[2]); }
             set { Set(value, ref relays[2]); }
@@ -644,7 +645,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #4.
         /// </summary>
-        public Function Relay4
+        public Relay Relay4
         {
             get { return Get(ref relays[3]); }
             set { Set(value, ref relays[3]); }
@@ -653,7 +654,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #5.
         /// </summary>
-        public Function Relay5
+        public Relay Relay5
         {
             get { return Get(ref relays[4]); }
             set { Set(value, ref relays[4]); }
@@ -662,7 +663,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #6.
         /// </summary>
-        public Function Relay6
+        public Relay Relay6
         {
             get { return Get(ref relays[5]); }
             set { Set(value, ref relays[5]); }
@@ -671,7 +672,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #7.
         /// </summary>
-        public Function Relay7
+        public Relay Relay7
         {
             get { return Get(ref relays[6]); }
             set { Set(value, ref relays[6]); }
@@ -680,7 +681,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Function to calculate the state of relay #8.
         /// </summary>
-        public Function Relay8
+        public Relay Relay8
         {
             get { return Get(ref relays[7]); }
             set { Set(value, ref relays[7]); }
@@ -690,16 +691,16 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     }
 
     /// <summary>
+    /// Top-level class containing the entire relay function.
+    /// </summary>
+    public sealed class Relay : UnaryFunction
+    {
+        public Relay() : base(_ => _) { }
+    }
+
+    /// <summary>
     /// Base class for all logic functions.
     /// </summary>
-    [XmlInclude(typeof(Equals))]
-    [XmlInclude(typeof(And))]
-    [XmlInclude(typeof(Or))]
-    [XmlInclude(typeof(Xor))]
-    [XmlInclude(typeof(Not))]
-    [XmlInclude(typeof(AlwaysOn))]
-    [XmlInclude(typeof(AlwaysOff))]
-    [XmlInclude(typeof(SwitchRef))]
     public abstract class Function : BaseObject
     {
         internal Function() { }
@@ -718,6 +719,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// Evaluates the function and returns its result.
         /// </summary>
+        [XmlIgnore]
         public abstract bool Value { get; }
 
         /// <summary>
@@ -727,15 +729,14 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     }
 
     /// <summary>
-    /// Base class for all binary functions.
+    /// Base class for all functions with a variable number of arguments.
     /// </summary>
-    public abstract class BinaryFunction : Function
+    public abstract class VariadicFunction : Function
     {
         private readonly Func<bool, bool, bool> method;
-        private Function op1 = null;
-        private Function op2 = null;
+        private IEnumerable<Function> ops = null;
 
-        internal BinaryFunction(Func<bool, bool, bool> method)
+        internal VariadicFunction(Func<bool, bool, bool> method)
         {
             this.method = method;
         }
@@ -743,34 +744,39 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         protected override void PerformInitialization()
         {
             // ensure that both operators are specified, valid and hooked
-            if (op1 == null)
-                throw new ConfigurationErrorsException(Properties.Resources.Configuration_MissingFirstOperand);
-            if (op2 == null)
-                throw new ConfigurationErrorsException(Properties.Resources.Configuration_MissingSecondOperand);
-            try { op1.EnsureInitialized(); }
-            catch (ConfigurationErrorsException e) { throw new ConfigurationErrorsException(string.Format(Properties.Resources.Configuration_FirstOperandError, op1.GetType(), e.Message)); }
-            try { op2.EnsureInitialized(); }
-            catch (ConfigurationErrorsException e) { throw new ConfigurationErrorsException(string.Format(Properties.Resources.Configuration_SecondOperandError, op2.GetType(), e.Message)); }
-            op1.ValueChanged += (s, e) => OnValueChanged(e);
-            op2.ValueChanged += (s, e) => OnValueChanged(e);
+            if (ops == null || ops.Count() == 0)
+                throw new ConfigurationErrorsException(Properties.Resources.Configuration_MissingOperand);
+            foreach (var op in ops)
+            {
+                try { op.EnsureInitialized(); }
+                catch (ConfigurationErrorsException e) { throw new ConfigurationErrorsException(string.Format(Properties.Resources.Configuration_OperandError, op.GetType().Name, e.Message)); }
+                op.ValueChanged += (s, e) => OnValueChanged(e);
+            }
+        }
+
+        [XmlElement("Equals", typeof(Equals))]
+        [XmlElement("And", typeof(And))]
+        [XmlElement("Or", typeof(Or))]
+        [XmlElement("Xor", typeof(Xor))]
+        [XmlElement("Not", typeof(Not))]
+        [XmlElement("AlwaysOn", typeof(AlwaysOn))]
+        [XmlElement("AlwaysOff", typeof(AlwaysOff))]
+        [XmlElement("SwitchRef", typeof(SwitchRef))]
+        [EditorBrowsable(EditorBrowsableState.Never), Browsable(false)]
+        public object[] InternalOps
+        {
+            get { return Ops.ToArray(); }
+            set { Ops = value.Cast<Function>(); }
         }
 
         /// <summary>
-        /// First operand.
+        /// All operands.
         /// </summary>
-        public Function Op1
+        [XmlIgnore]
+        public IEnumerable<Function> Ops
         {
-            get { return Get(ref op1); }
-            set { Set(value, ref op1); }
-        }
-
-        /// <summary>
-        /// Second operand.
-        /// </summary>
-        public Function Op2
-        {
-            get { return Get(ref op2); }
-            set { Set(value, ref op2); }
+            get { return Get(ref ops); }
+            set { Set(value, ref ops); }
         }
 
         public override bool Value
@@ -778,7 +784,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             get
             {
                 EnsureInitialized();
-                return method(op1.Value, op2.Value);
+                return ops.Aggregate(ops.First().Value, (v, m) => method(v, m.Value));
             }
         }
     }
@@ -802,13 +808,29 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             if (op == null)
                 throw new ConfigurationErrorsException(Properties.Resources.Configuration_MissingOperand);
             try { op.EnsureInitialized(); }
-            catch (ConfigurationErrorsException e) { throw new ConfigurationErrorsException(string.Format(Properties.Resources.Configuration_OperandError, op.GetType(), e.Message)); }
+            catch (ConfigurationErrorsException e) { throw new ConfigurationErrorsException(string.Format(Properties.Resources.Configuration_OperandError, op.GetType().Name, e.Message)); }
             op.ValueChanged += (s, e) => OnValueChanged(e);
+        }
+
+        [XmlElement("Equals", typeof(Equals))]
+        [XmlElement("And", typeof(And))]
+        [XmlElement("Or", typeof(Or))]
+        [XmlElement("Xor", typeof(Xor))]
+        [XmlElement("Not", typeof(Not))]
+        [XmlElement("AlwaysOn", typeof(AlwaysOn))]
+        [XmlElement("AlwaysOff", typeof(AlwaysOff))]
+        [XmlElement("SwitchRef", typeof(SwitchRef))]
+        [EditorBrowsable(EditorBrowsableState.Never), Browsable(false)]
+        public object InternalOp
+        {
+            get { return Op; }
+            set { Op = (Function)value; }
         }
 
         /// <summary>
         /// Operand.
         /// </summary>
+        [XmlIgnore]
         public Function Op
         {
             get { return Get(ref op); }
@@ -852,7 +874,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// <summary>
     /// Returns the result of <c>==</c>.
     /// </summary>
-    public sealed class Equals : BinaryFunction
+    public sealed class Equals : VariadicFunction
     {
         public Equals() : base((op1, op2) => op1 == op2) { }
     }
@@ -860,7 +882,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// <summary>
     /// Returns the result of <c>&</c>.
     /// </summary>
-    public sealed class And : BinaryFunction
+    public sealed class And : VariadicFunction
     {
         public And() : base((op1, op2) => op1 & op2) { }
     }
@@ -868,7 +890,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// <summary>
     /// Returns the result of <c>|</c>.
     /// </summary>
-    public sealed class Or : BinaryFunction
+    public sealed class Or : VariadicFunction
     {
         public Or() : base((op1, op2) => op1 | op2) { }
     }
@@ -876,10 +898,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// <summary>
     /// Returns the result of <c>^</c>.
     /// </summary>
-    public sealed class Xor : BinaryFunction
+    public sealed class Xor : VariadicFunction
     {
         public Xor() : base((op1, op2) => op1 ^ op2) { }
-
     }
 
     /// <summary>
@@ -928,6 +949,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         /// <summary>
         /// The name of the referenced switch.
         /// </summary>
+        [XmlText]
         public string Name
         {
             get { return Get(ref name); }

@@ -880,7 +880,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     }
 
     /// <summary>
-    /// Returns the result of <c>&</c>.
+    /// Returns the result of <c>&amp;</c>.
     /// </summary>
     public sealed class And : VariadicFunction
     {

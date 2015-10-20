@@ -33,7 +33,7 @@ namespace Aufbauwerk.Net.Asterisk
         {
             private readonly CookieContainer cookies;
 
-            internal CookieWebClient(CookieContainer cookies)
+            public CookieWebClient(CookieContainer cookies)
             {
                 this.cookies = cookies;
             }
@@ -47,165 +47,85 @@ namespace Aufbauwerk.Net.Asterisk
             }
         }
 
-        private readonly HashSet<CookieWebClient> webClients = new HashSet<CookieWebClient>();
-        private readonly CookieContainer cookies = new CookieContainer();
-        private readonly Queue<WaitCallback> pendingOperations = new Queue<WaitCallback>();
-        private bool disposed = false;
-        private int pendingSyncOperations = 0;
-        private readonly Uri baseUri;
-        private int numberOfQueries = 3;
-
-        /// <summary>
-        /// 
-        /// </summary>
-        protected class AsyncResult : IAsyncResult
+        internal class AsyncResult : IAsyncResult
         {
             private readonly object syncRoot = new object();
-            private ManualResetEvent waitHandle;
+            private readonly WebClient webClient;
+            private readonly ManualResetEvent waitHandle;
             private bool cancelled;
             private Exception error;
             private string result;
 
-            /// <summary>
-            /// Encapsulates the results of an asynchronous operation.
-            /// </summary>
-            /// <param name="client">The <see cref="Aufbauwerk.Net.Asterisk.AsteriskClient"/> that initiated the operation.</param>
-            /// <param name="action">The <see cref="Aufbauwerk.Net.Asterisk.AsteriskAction"/> describing the operation.</param>
-            /// <exception cref="System.ArgumentNullException">Either <paramref name="client"/> or <paramref name="action"/> is <c>null</c>.</exception>
-            public AsyncResult(AsteriskClient client, AsteriskAction action)
+            public AsyncResult(AsteriskClient client, AsteriskAction action, AsyncCallback callback, object state)
             {
                 // create the instance and mark it as synchronous
                 if (client == null)
                     throw ExceptionBuilder.NullArgument("client");
                 if (action == null)
                     throw ExceptionBuilder.NullArgument("action");
-                CompletedSynchronously = true;
                 Client = client;
-                Address = new Uri(client.baseUri, action.ToString());
+                Action = action;
+                Callback = callback;
+                AsyncState = state;
+                webClient = new CookieWebClient(client.Cookies);
+                waitHandle = new ManualResetEvent(false);
+                try { ThreadPool.QueueUserWorkItem(BeginDownload); }
+                catch
+                {
+                    webClient.Dispose();
+                    waitHandle.Close();
+                    throw;
+                }
             }
 
-            /// <summary>
-            /// Sets the async properties and starts the operation.
-            /// </summary>
-            /// <param name="callback">A method to be called when the corresponding asynchronous operation completes.</param>
-            /// <param name="state">A user-defined object that qualifies or contains information about an asynchronous operation.</param>
-            /// <returns>The current <see cref="Aufbauwerk.Net.Asterisk.AsteriskClient.AsyncResult"/> instance.</returns>
-            /// <exception cref="System.InvalidOperationException">The operation already completed.</exception>
-            public IAsyncResult SetAsync(AsyncCallback callback, object state)
-            {
-                // check the current state and set the async state and variables
-                lock (syncRoot)
-                {
-                    if (!CompletedSynchronously || IsCompleted)
-                        throw new InvalidOperationException();
-                    CompletedSynchronously = false;
-                    Callback = callback;
-                    AsyncState = state;
-                    waitHandle = new ManualResetEvent(false);
-                }
-
-                // try to aquire a web client
-                var webClient = Client.AcquireWebClient(BeginDownload);
-                if (webClient != null)
-                {
-                    // schedule the download or release the client if that fails
-                    try { ThreadPool.QueueUserWorkItem(BeginDownload, webClient); }
-                    catch
-                    {
-                        Client.ReleaseWebClient(webClient);
-                        throw;
-                    }
-                }
-                return this;
-            }
-
-            /// <summary>
-            /// Gets a user-defined object that qualifies or contains information about an asynchronous operation.
-            /// </summary>
             public object AsyncState { get; private set; }
 
-            /// <summary>
-            /// Gets a <see cref="System.Threading.WaitHandle"/> that is used to wait for an asynchronous operation to complete.
-            /// </summary>
-            public WaitHandle AsyncWaitHandle
-            {
-                get
-                {
-                    // only return a handle if the op is async and running
-                    var handle = waitHandle;
-                    if (handle == null)
-                        throw new InvalidOperationException();
-                    return handle;
-                }
-            }
+            public WaitHandle AsyncWaitHandle { get { return waitHandle; } }
 
-            /// <summary>
-            /// Gets a value that indicates whether the asynchronous operation completed synchronously.
-            /// </summary>
             public bool CompletedSynchronously { get; private set; }
 
-            /// <summary>
-            /// Gets a value that indicates whether the asynchronous operation has completed.
-            /// </summary>
             public bool IsCompleted { get; private set; }
 
-            /// <summary>
-            /// Gets the <see cref="Aufbauwerk.Net.Asterisk.AsteriskClient"/> that initiated the async operation.
-            /// </summary>
-            public AsteriskClient Client { get; private set; }
+            internal AsteriskClient Client { get; private set; }
 
-            internal Uri Address { get; private set; }
+            internal AsteriskAction Action { get; private set; }
 
             internal AsyncCallback Callback { get; private set; }
 
-            private void BeginDownload(object state)
+            private void BeginDownload(object unused)
             {
                 // set the completed handler and start the download
-                var webClient = (CookieWebClient)state;
                 webClient.DownloadStringCompleted += EndDownload;
-                try { webClient.DownloadStringAsync(Address, null); }
+                try { webClient.DownloadStringAsync(new Uri(Client.BaseUri, Action.ToString()), null); }
                 catch (Exception e)
                 {
-                    // remove the handler, release the client and fail
+                    // remove the handler and fail
                     webClient.DownloadStringCompleted -= EndDownload;
-                    Client.ReleaseWebClient(webClient);
-                    EndAsync((ar, arg) => ar.error = arg, e);
+                    Complete(e, false, null);
                 }
             }
 
             private void EndDownload(object sender, DownloadStringCompletedEventArgs e)
             {
-                // remove the handler, release the client and complete the task
-                var webClient = (CookieWebClient)sender;
+                // remove the handler and complete the task
                 webClient.DownloadStringCompleted -= EndDownload;
-                Client.ReleaseWebClient(webClient);
-                EndAsync
-                (
-                    (ar, arg) =>
-                    {
-                        if (arg.Error != null)
-                            ar.error = arg.Error;
-                        else if (arg.Cancelled)
-                            ar.cancelled = true;
-                        else
-                            ar.result = arg.Result;
-                    },
-                    e
-                );
+                Complete(e.Error, e.Cancelled, e.Error == null && !e.Cancelled ? e.Result : null);
             }
 
-            private void EndAsync<T>(Action<AsyncResult, T> applyResult, T result)
+            private void Complete(Exception error, bool cancelled, string result)
             {
                 // store the result
                 lock (syncRoot)
                 {
-                    // ensure that the op is async and not completed
-                    if (CompletedSynchronously || IsCompleted)
+                    // ensure that the op is not completed before
+                    if (IsCompleted)
                         throw new InvalidOperationException();
+                    IsCompleted = true;
 
                     // set the variables
-                    applyResult(this, result);
-                    IsCompleted = true;
+                    this.error = error;
+                    this.cancelled = cancelled;
+                    this.result = result;
 
                     // signal the wait handle and the threads waiting for an end
                     waitHandle.Set();
@@ -217,89 +137,97 @@ namespace Aufbauwerk.Net.Asterisk
                     Callback(this);
             }
 
-            /// <summary>
-            /// Returns the server response.
-            /// </summary>
-            /// <returns>A <see cref="string"/> containing the raw server data.</returns>
-            public string Execute()
+            public void Cancel()
+            {
+                webClient.CancelAsync();
+            }
+
+            public string GetResult()
             {
                 lock (syncRoot)
                 {
-                    // handle sync and async ops differently
-                    if (CompletedSynchronously)
-                    {
-                        // perform the query synchronously if necessary
-                        if (!IsCompleted)
-                        {
-                            var webClient = Client.AcquireWebClient(null);
-                            try { result = webClient.DownloadString(Address); }
-                            catch (OperationCanceledException) { cancelled = true; }
-                            catch (Exception e) { error = e; }
-                            Client.ReleaseWebClient(webClient);
-                            IsCompleted = true;
-                        }
-                    }
-                    else
-                    {
-                        // wait for completion
-                        while (!IsCompleted)
-                            Monitor.Wait(syncRoot);
+                    // wait for completion
+                    while (!IsCompleted)
+                        Monitor.Wait(syncRoot);
 
-                        // ensure that the function isn't called twice
-                        if (waitHandle == null)
-                            throw ExceptionBuilder.AsyncResultEndedTwice();
+                    // close the handle and client
+                    webClient.Dispose();
+                    waitHandle.Close();
+                }
 
-                        // close the handle
-                        waitHandle.Close();
-                        waitHandle = null;
-                    }
+                // return the value or the error that occurred
+                if (error != null)
+                    throw error;
+                if (cancelled)
+                    throw new OperationCanceledException();
+                return result;
+            }
+        }
 
-                    // return the value or the error that occurred
-                    if (error != null)
-                        throw error;
-                    if (cancelled)
-                        throw new OperationCanceledException();
-                    return result;
+        /// <summary>
+        /// Represents a parser for the raw AMI result.
+        /// </summary>
+        /// <typeparam name="T">The result type.</typeparam>
+        protected abstract class Parser<T>
+        {
+            /// <summary>
+            /// Creates a new parser instance.
+            /// </summary>
+            /// <param name="action">The action whose results should be parsed.</param>
+            /// <exception cref="System.ArgumentNullException"><paramref name="action"/> is <c>null</c>.</exception>
+            public Parser(AsteriskAction action)
+            {
+                if (action == null)
+                    throw ExceptionBuilder.NullArgument("action");
+                Action = action;
+            }
+
+            internal AsteriskAction Action { get; private set; }
+
+            /// <summary>
+            /// Parses the result of an AMI action.
+            /// </summary>
+            /// <param name="s">The raw AMI result as <see cref="string"/>.</param>
+            /// <returns>The properly typed result.</returns>
+            /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
+            public abstract T Parse(string s);
+
+            internal string ExpectedResponse
+            {
+                get
+                {
+                    return
+                        string.Equals(Action.Name, "Ping", StringComparison.OrdinalIgnoreCase) ? "Pong" :
+                        string.Equals(Action.Name, "Logoff", StringComparison.OrdinalIgnoreCase) ? "Goodbye" :
+                        "Success";
                 }
             }
         }
 
-        private class AsyncQueryResult : AsyncResult
+        private class QueryParser : Parser<AsteriskResponse>
         {
-            private readonly string expectedResponse;
+            public QueryParser(AsteriskAction action) : base(action) { }
 
-            public AsyncQueryResult(AsteriskClient client, AsteriskAction action)
-                : base(client, action)
+            public override AsteriskResponse Parse(string s)
             {
-                // set the expected result
-                if (string.Equals(action.Name, "Ping", StringComparison.InvariantCultureIgnoreCase))
-                    expectedResponse = "Pong";
-                else if (string.Equals(action.Name, "Logoff", StringComparison.InvariantCultureIgnoreCase))
-                    expectedResponse = "Goodbye";
-                else
-                    expectedResponse = "Success";
-            }
-
-            public new AsteriskResponse Execute()
-            {
-                return new AsteriskResponse(base.Execute(), expectedResponse);
+                return new AsteriskResponse(s, ExpectedResponse);
             }
         }
 
-        private class AsyncNonQueryResult : AsyncQueryResult
+        private class NonQueryParser : Parser<bool>
         {
-            public AsyncNonQueryResult(AsteriskClient client, AsteriskAction action) : base(client, action) { }
+            public NonQueryParser(AsteriskAction action) : base(action) { }
 
-            public new void Execute()
+            public override bool Parse(string s)
             {
-                base.Execute();
+                return new AsteriskResponse(s, ExpectedResponse) != null;
             }
         }
 
-        private class AsyncScalarResult : AsyncQueryResult
+        private class ScalarParser : Parser<string>
         {
-            public AsyncScalarResult(AsteriskClient client, AsteriskAction action, string valueName) :
-                base(client, action)
+            public ScalarParser(AsteriskAction action, string valueName)
+                : base(action)
             {
                 if (valueName == null)
                     throw ExceptionBuilder.NullArgument("valueName");
@@ -310,16 +238,16 @@ namespace Aufbauwerk.Net.Asterisk
 
             public string ValueName { get; private set; }
 
-            public new string Execute()
+            public override string Parse(string s)
             {
-                return base.Execute().Get(ValueName);
+                return new AsteriskResponse(s, ExpectedResponse).Get(ValueName);
             }
         }
 
-        private class AsyncEnumerationResult : AsyncResult
+        private class EnumerationParser : Parser<AsteriskEnumeration>
         {
-            public AsyncEnumerationResult(AsteriskClient client, AsteriskAction action, string completeEventName)
-                : base(client, action)
+            public EnumerationParser(AsteriskAction action, string completeEventName)
+                : base(action)
             {
                 if (completeEventName == null)
                     throw ExceptionBuilder.NullArgument("completeEventName");
@@ -330,11 +258,14 @@ namespace Aufbauwerk.Net.Asterisk
 
             public string CompleteEventName { get; private set; }
 
-            public new AsteriskEnumeration Execute()
+            public override AsteriskEnumeration Parse(string s)
             {
-                return new AsteriskEnumeration(base.Execute(), CompleteEventName);
+                return new AsteriskEnumeration(s, CompleteEventName);
             }
         }
+
+        private readonly Dictionary<AsyncResult, object> asyncResults = new Dictionary<AsyncResult, object>();
+        private bool disposed = false;
 
         /// <summary>
         /// Creates a new instance by building the base uri.
@@ -356,7 +287,8 @@ namespace Aufbauwerk.Net.Asterisk
         {
             if (baseUri == null)
                 throw ExceptionBuilder.NullArgument("baseUri");
-            this.baseUri = baseUri;
+            BaseUri = baseUri;
+            Cookies = new CookieContainer();
         }
 
         /// <summary>
@@ -367,6 +299,10 @@ namespace Aufbauwerk.Net.Asterisk
             Dispose(false);
         }
 
+        internal Uri BaseUri { get; private set; }
+
+        internal CookieContainer Cookies { get; private set; }
+
         /// <summary>
         /// Ensure that the object isn't disposed.
         /// </summary>
@@ -374,7 +310,7 @@ namespace Aufbauwerk.Net.Asterisk
         protected void CheckDisposed()
         {
             if (disposed)
-                throw ExceptionBuilder.AsteriskClientAlreadyDisposed(baseUri);
+                throw ExceptionBuilder.AsteriskClientAlreadyDisposed(BaseUri);
         }
 
         /// <summary>
@@ -387,14 +323,9 @@ namespace Aufbauwerk.Net.Asterisk
             {
                 if (disposing)
                 {
-                    lock (webClients)
-                    {
-                        foreach (var webClient in webClients)
-                        {
-                            try { webClient.CancelAsync(); }
-                            catch { }
-                        }
-                    }
+                    lock (asyncResults)
+                        foreach (var asyncResult in asyncResults.Keys)
+                            asyncResult.Cancel();
                 }
                 disposed = true;
             }
@@ -409,156 +340,114 @@ namespace Aufbauwerk.Net.Asterisk
             GC.SuppressFinalize(this);
         }
 
-        private CookieWebClient AcquireWebClient(WaitCallback asyncOperation)
-        {
-            // ensure that we're not disposed
-            CheckDisposed();
-
-            lock (webClients)
-            {
-                // handle the case where there are no more queries available
-                if (webClients.Count >= numberOfQueries)
-                {
-                    // check if the call should block
-                    if (asyncOperation == null)
-                    {
-                        // wait until there is something available
-                        pendingSyncOperations++;
-                        try
-                        {
-                            do { Monitor.Wait(webClients); }
-                            while (webClients.Count >= numberOfQueries);
-                        }
-                        finally { pendingSyncOperations--; }
-                    }
-                    else
-                    {
-                        // queue the operation and return null
-                        pendingOperations.Enqueue(asyncOperation);
-                        return null;
-                    }
-                }
-
-                // create the new client
-                var webClient = new CookieWebClient(cookies);
-                webClients.Add(webClient);
-                return webClient;
-            }
-        }
-
-        private void ReleaseWebClient(CookieWebClient client)
-        {
-            lock (webClients)
-            {
-                // return the client and call the assignment method
-                if (!webClients.Remove(client))
-                    throw new InvalidOperationException();
-                AssignWebClientsWithinLock();
-            }
-        }
-
-        private void AssignWebClientsWithinLock()
-        {
-            // ensure that there are vacancies
-            var remainingAvailableClients = numberOfQueries - webClients.Count;
-            if (remainingAvailableClients > 0)
-            {
-                // notify pending sync ops first
-                if (pendingSyncOperations > 0)
-                {
-                    Monitor.PulseAll(webClients);
-                    remainingAvailableClients -= pendingSyncOperations;
-                }
-
-                // start as many async ops as possible
-                while (remainingAvailableClients-- > 0 && pendingOperations.Count > 0)
-                {
-                    // create and add the web client
-                    var webClient = new CookieWebClient(cookies);
-                    webClients.Add(webClient);
-                    try
-                    {
-                        // dequeue the pending op and start it
-                        var result = pendingOperations.Dequeue();
-                        try { ThreadPool.QueueUserWorkItem(result, webClient); }
-                        catch
-                        {
-                            // on error enqueue the op again
-                            pendingOperations.Enqueue(result);
-                            throw;
-                        }
-                    }
-                    catch
-                    {
-                        // on error remove the client
-                        webClients.Remove(webClient);
-                        throw;
-                    }
-                }
-            }
-        }
-
         /// <summary>
-        /// Casts the given <see cref="System.IAsyncResult"/> into the requested type <typeparamref name="T"/>.
+        /// Executes an AMI action.
         /// </summary>
-        /// <typeparam name="T">The type of operation.</typeparam>
-        /// <param name="asyncResult">A reference to the outstanding asynchronous I/O request.</param>
-        /// <returns>The corresponding instance of <typeparamref name="T"/>.</returns>
-        /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
-        /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from a method returning <typeparamref name="T"/> on the current client.</exception>
-        /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
-        protected T GetAsync<T>(IAsyncResult asyncResult) where T : AsyncResult
-        {
-            if (asyncResult == null)
-                throw ExceptionBuilder.NullArgument("asyncResult");
-            if (asyncResult.GetType() != typeof(T))
-                throw ExceptionBuilder.AsteriskClientIncompatibleIAsyncResult("asyncResult");
-            var result = (T)asyncResult;
-            if (result.Client != this)
-                throw ExceptionBuilder.AsteriskClientNotOwnerOfIAsyncResult("asyncResult");
-            CheckDisposed();
-            return result;
-        }
-
-        /// <summary>
-        /// Executes an operation.
-        /// </summary>
-        /// <param name="action">The Asterisk Manager action definition.</param>
-        /// <returns>The Asterisk Manager response.</returns>
-        /// <exception cref="System.ArgumentNullException"><paramref name="action"/> is <c>null</c>.</exception>
+        /// <typeparam name="T">The result type.</typeparam>
+        /// <param name="parser">A <see cref="Parser{T}"/> that converts the raw AMI result into type <typeparamref name="T"/>.</param>
+        /// <returns>The parsed result.</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="parser"/> is <c>null</c>.</exception>
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         /// <exception cref="System.Net.WebException">An error occurred while querying the server.</exception>
-        public string Execute(AsteriskAction action)
+        /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
+        protected virtual T Execute<T>(Parser<T> parser)
         {
-            return new AsyncResult(this, action).Execute();
+            // ensure the client is not disposed and execute the action
+            if (parser == null)
+                ExceptionBuilder.NullArgument("parser");
+            CheckDisposed();
+            using (var client = new CookieWebClient(Cookies))
+                return parser.Parse(client.DownloadString(new Uri(BaseUri, parser.Action.ToString())));
         }
 
         /// <summary>
         /// Begins an asynchronous operation.
         /// </summary>
-        /// <param name="action">The Asterisk Manager action definition.</param>
+        /// <typeparam name="T">The result type.</typeparam>
+        /// <param name="parser">A <see cref="Parser{T}"/> that converts the raw AMI result into type <typeparamref name="T"/>.</param>
         /// <param name="callback">An optional asynchronous callback, to be called when the operation is complete.</param>
         /// <param name="state">A user-provided object that distinguishes this particular asynchronous request from other requests.</param>
         /// <returns>An <see cref="System.IAsyncResult"/> that represents the asynchronous operation, which could still be pending.</returns>
-        /// <exception cref="System.ArgumentNullException"><paramref name="action"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="parser"/> is <c>null</c>.</exception>
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
-        public IAsyncResult BeginExecute(AsteriskAction action, AsyncCallback callback, object state)
+        protected virtual IAsyncResult BeginExecute<T>(Parser<T> parser, AsyncCallback callback, object state)
         {
-            return new AsyncResult(this, action).SetAsync(callback, state);
+            // ensure the client is not disposed and create the async result
+            if (parser == null)
+                ExceptionBuilder.NullArgument("parser");
+            CheckDisposed();
+            lock (asyncResults)
+            {
+                var asyncResult = new AsyncResult(this, parser.Action, callback, state);
+                asyncResults.Add(asyncResult, parser);
+                return asyncResult;
+            }
         }
 
         /// <summary>
         /// Ends an asynchronous operation.
         /// </summary>
-        /// <param name="asyncResult">A reference to the outstanding asynchronous request.</param>
-        /// <returns>The Asterisk Manager response.</returns>
+        /// <typeparam name="T">The parser of the operation.</typeparam>
+        /// <typeparam name="U">The result type of the operation.</typeparam>
+        /// <param name="asyncResult">A reference to the outstanding asynchronous AMI request.</param>
+        /// <returns>The result of parser <typeparamref name="T"/>.</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
-        /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from a <see cref="BeginExecute"/> method on the current client.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from a method with the same parser type <typeparamref name="T"/> on the current client.</exception>
+        /// <exception cref="System.InvalidOperationException">The asynchronous operation was already ended.</exception>
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         /// <exception cref="System.Net.WebException">An error occurred while querying the server.</exception>
-        public string EndExecute(IAsyncResult asyncResult)
+        /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
+        protected virtual U EndExecute<T, U>(IAsyncResult asyncResult) where T : Parser<U>
         {
-            return GetAsync<AsyncResult>(asyncResult).Execute();
+            // check the args and state
+            if (asyncResult == null)
+                throw ExceptionBuilder.NullArgument("asyncResult");
+            if (asyncResult.GetType() != typeof(AsyncResult))
+                throw ExceptionBuilder.AsteriskClientNotOwnerOfIAsyncResult("asyncResult");
+            CheckDisposed();
+
+            // get the parser
+            object parser;
+            lock (asyncResults)
+            {
+                if (!asyncResults.TryGetValue((AsyncResult)asyncResult, out parser))
+                {
+                    if (((AsyncResult)asyncResult).Client == this)
+                        throw ExceptionBuilder.AsteriskClientAlreadyEndedIAsyncResult();
+                    throw ExceptionBuilder.AsteriskClientNotOwnerOfIAsyncResult("asyncResult");
+                }
+                if (parser.GetType() != typeof(T))
+                    throw ExceptionBuilder.AsteriskClientIncompatibleIAsyncResult("asyncResult");
+                asyncResults.Remove((AsyncResult)asyncResult);
+            }
+
+            // get the result
+            return ((T)parser).Parse(((AsyncResult)asyncResult).GetResult());
+        }
+
+        /// <summary>
+        /// Cancels an asynchronous operation. 
+        /// </summary>
+        /// <param name="asyncResult">A reference to the outstanding asynchronous AMI request.</param>
+        /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from this instance.</exception>
+        /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
+        protected virtual void CancelExecute(IAsyncResult asyncResult)
+        {
+            // check the args and state
+            if (asyncResult == null)
+                throw ExceptionBuilder.NullArgument("asyncResult");
+            if (asyncResult.GetType() != typeof(AsyncResult))
+                throw ExceptionBuilder.AsteriskClientNotOwnerOfIAsyncResult("asyncResult");
+            CheckDisposed();
+
+            // make sure the operation exists
+            lock (asyncResults)
+                if (!asyncResults.ContainsKey((AsyncResult)asyncResult))
+                    throw ExceptionBuilder.AsteriskClientNotOwnerOfIAsyncResult("asyncResult");
+
+            // cancel it
+            ((AsyncResult)asyncResult).Cancel();
         }
 
         /// <summary>
@@ -571,7 +460,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public void ExecuteNonQuery(AsteriskAction action)
         {
-            new AsyncNonQueryResult(this, action).Execute();
+            Execute(new NonQueryParser(action));
         }
 
         /// <summary>
@@ -585,7 +474,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         public IAsyncResult BeginExecuteNonQuery(AsteriskAction action, AsyncCallback callback, object state)
         {
-            return new AsyncNonQueryResult(this, action).SetAsync(callback, state);
+            return BeginExecute(new NonQueryParser(action), callback, state);
         }
 
         /// <summary>
@@ -594,12 +483,13 @@ namespace Aufbauwerk.Net.Asterisk
         /// <param name="asyncResult">A reference to the outstanding asynchronous request.</param>
         /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
         /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from a <see cref="BeginExecuteNonQuery"/> method on the current client.</exception>
+        /// <exception cref="System.InvalidOperationException">The asynchronous operation has already been ended.</exception>
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         /// <exception cref="System.Net.WebException">An error occurred while querying the server.</exception>
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public void EndExecuteNonQuery(IAsyncResult asyncResult)
         {
-            GetAsync<AsyncNonQueryResult>(asyncResult).Execute();
+            EndExecute<NonQueryParser, bool>(asyncResult);
         }
 
         /// <summary>
@@ -614,7 +504,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public string ExecuteScalar(AsteriskAction action, string valueName)
         {
-            return new AsyncScalarResult(this, action, valueName).Execute();
+            return Execute(new ScalarParser(action, valueName));
         }
 
         /// <summary>
@@ -630,7 +520,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         public IAsyncResult BeginExecuteScalar(AsteriskAction action, string valueName, AsyncCallback callback, object state)
         {
-            return new AsyncScalarResult(this, action, valueName).SetAsync(callback, state);
+            return BeginExecute(new ScalarParser(action, valueName), callback, state);
         }
 
         /// <summary>
@@ -640,12 +530,13 @@ namespace Aufbauwerk.Net.Asterisk
         /// <returns>The scalar value.</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
         /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from a <see cref="BeginExecuteScalar"/> method on the current client.</exception>
+        /// <exception cref="System.InvalidOperationException">The asynchronous operation has already been ended.</exception>
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         /// <exception cref="System.Net.WebException">An error occurred while querying the server.</exception>
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public string EndExecuteScalar(IAsyncResult asyncResult)
         {
-            return GetAsync<AsyncScalarResult>(asyncResult).Execute();
+            return EndExecute<ScalarParser, string>(asyncResult);
         }
 
         /// <summary>
@@ -659,7 +550,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public AsteriskResponse ExecuteQuery(AsteriskAction action)
         {
-            return new AsyncQueryResult(this, action).Execute();
+            return Execute(new QueryParser(action));
         }
 
         /// <summary>
@@ -673,7 +564,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         public IAsyncResult BeginExecuteQuery(AsteriskAction action, AsyncCallback callback, object state)
         {
-            return new AsyncQueryResult(this, action).SetAsync(callback, state);
+            return BeginExecute(new QueryParser(action), callback, state);
         }
 
         /// <summary>
@@ -683,12 +574,13 @@ namespace Aufbauwerk.Net.Asterisk
         /// <returns>The response name-value pairs.</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
         /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from a <see cref="BeginExecuteQuery"/> method on the current client.</exception>
+        /// <exception cref="System.InvalidOperationException">The asynchronous operation has already been ended.</exception>
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         /// <exception cref="System.Net.WebException">An error occurred while querying the server.</exception>
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public AsteriskResponse EndExecuteQuery(IAsyncResult asyncResult)
         {
-            return GetAsync<AsyncQueryResult>(asyncResult).Execute();
+            return EndExecute<QueryParser, AsteriskResponse>(asyncResult);
         }
 
         /// <summary>
@@ -719,7 +611,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public AsteriskEnumeration ExecuteEnumeration(AsteriskAction action, string completeEventName)
         {
-            return new AsyncEnumerationResult(this, action, completeEventName).Execute();
+            return Execute(new EnumerationParser(action, completeEventName));
         }
 
         /// <summary>
@@ -750,7 +642,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         public IAsyncResult BeginExecuteEnumeration(AsteriskAction action, string completeEventName, AsyncCallback callback, object state)
         {
-            return new AsyncEnumerationResult(this, action, completeEventName).SetAsync(callback, state);
+            return BeginExecute(new EnumerationParser(action, completeEventName), callback, state);
         }
 
         /// <summary>
@@ -760,45 +652,13 @@ namespace Aufbauwerk.Net.Asterisk
         /// <returns>An <see cref="Aufbauwerk.Net.Asterisk.AsteriskEnumeration"/> instance.</returns>
         /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
         /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from calling <see cref="BeginExecuteEnumeration(Aufbauwerk.Net.Asterisk.AsteriskAction,string,System.AsyncCallback,object)"/> or <see cref="BeginExecuteEnumeration(Aufbauwerk.Net.Asterisk.AsteriskAction,string,System.AsyncCallback,object)"/> on the current client.</exception>
+        /// <exception cref="System.InvalidOperationException">The asynchronous operation has already been ended.</exception>
         /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
         /// <exception cref="System.Net.WebException">An error occurred while querying the server.</exception>
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response contains an error.</exception>
         public AsteriskEnumeration EndExecuteEnumeration(IAsyncResult asyncResult)
         {
-            return GetAsync<AsyncEnumerationResult>(asyncResult).Execute();
-        }
-
-        /// <summary>
-        /// Gets or sets the number of simultaneous server queries.
-        /// </summary>
-        /// <exception cref="System.ArgumentOutOfRangeException">The value is less than 1.</exception>
-        /// <exception cref="System.ObjectDisposedException">The client has been disposed.</exception>
-        public int SimultaneousQueries
-        {
-            get
-            {
-                CheckDisposed();
-                return numberOfQueries;
-            }
-            set
-            {
-                // check the input and if there's something to do
-                if (value < 1)
-                    throw ExceptionBuilder.AsteriskClientQueriesOutOfRange("value");
-                CheckDisposed();
-                if (numberOfQueries != value)
-                {
-                    lock (webClients)
-                    {
-                        if (numberOfQueries != value)
-                        {
-                            // apply the new limit and handle pending ops
-                            numberOfQueries = value;
-                            AssignWebClientsWithinLock();
-                        }
-                    }
-                }
-            }
+            return EndExecute<EnumerationParser, AsteriskEnumeration>(asyncResult);
         }
     }
 
@@ -846,11 +706,6 @@ namespace Aufbauwerk.Net.Asterisk
             return new AsteriskException(Res.GetString("EnumerationCompleteEventMissing"));
         }
 
-        internal static InvalidOperationException AsyncResultEndedTwice()
-        {
-            return new InvalidOperationException(Res.GetString("AsyncResultEndedTwice"));
-        }
-
         internal static ObjectDisposedException AsteriskClientAlreadyDisposed(Uri managerUri)
         {
             return new ObjectDisposedException(string.Format(Res.GetString("AsteriskClientFormatString"), managerUri), Res.GetString("AsteriskClientAlreadyDisposed"));
@@ -866,9 +721,9 @@ namespace Aufbauwerk.Net.Asterisk
             return new ArgumentException(paramName, string.Format(Res.GetString("AsteriskClientNotOwnerOfIAsyncResult"), paramName));
         }
 
-        internal static ArgumentOutOfRangeException AsteriskClientQueriesOutOfRange(string paramName)
+        internal static InvalidOperationException AsteriskClientAlreadyEndedIAsyncResult()
         {
-            return new ArgumentOutOfRangeException(paramName, Res.GetString("AsteriskClientQueriesOutOfRange"));
+            return new InvalidOperationException(Res.GetString("AsteriskClientAlreadyEndedIAsyncResult"));
         }
     }
 
@@ -877,8 +732,24 @@ namespace Aufbauwerk.Net.Asterisk
     /// </summary>
     public sealed class AsteriskAction : System.Collections.IEnumerable
     {
+        /// <summary>
+        /// Gets the AMI action that was used to start an asynchronous AMI request.
+        /// </summary>
+        /// <param name="asyncResult">A reference to the outstanding asynchronous AMI request.</param>
+        /// <returns>The <see cref="Aufbauwerk.Net.Asterisk.AsteriskAction"/> that was used to start the operation.</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="asyncResult"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="asyncResult"/> did not originate from a <see cref="Aufbauwerk.Net.Asterisk.AsteriskClient"/>.</exception>
+        public static AsteriskAction FromIAsyncResult(IAsyncResult asyncResult)
+        {
+            if (asyncResult == null)
+                throw ExceptionBuilder.NullArgument("asyncResult");
+            if (asyncResult.GetType() != typeof(AsteriskClient.AsyncResult))
+                throw ExceptionBuilder.AsteriskClientNotOwnerOfIAsyncResult("asyncResult");
+            return ((AsteriskClient.AsyncResult)asyncResult).Action;
+        }
+
         private readonly StringBuilder queryBuilder = new StringBuilder("rawman?action=");
-        private readonly NameValueCollection parameters = new NameValueCollection(StringComparer.InvariantCultureIgnoreCase);
+        private readonly NameValueCollection parameters = new NameValueCollection(StringComparer.OrdinalIgnoreCase);
         private string cachedQuery;
 
         private class ReadOnlyNameValueCollection : NameValueCollection
@@ -974,7 +845,7 @@ namespace Aufbauwerk.Net.Asterisk
         /// <exception cref="System.ArgumentNullException"><paramref name="input"/> is <c>null</c>.</exception>
         /// <exception cref="Aufbauwerk.Net.Asterisk.AsteriskException">The server response is invalid.</exception>
         public AsteriskResultSet(string input)
-            : base(StringComparer.InvariantCultureIgnoreCase)
+            : base(StringComparer.OrdinalIgnoreCase)
         {
             // check the input
             if (input == null)
@@ -1015,17 +886,6 @@ namespace Aufbauwerk.Net.Asterisk
                 throw ExceptionBuilder.ResultSetKeyNotUnique(name);
             return values[0];
         }
-
-        /// <summary>
-        /// Checks if the result set contains at least one value with the given key.
-        /// </summary>
-        /// <param name="key">The name of the key.</param>
-        /// <returns><c>true</c> if the key exists, <c>false</c> otherwise.</returns>
-        public bool Contains(string key)
-        {
-            var values = base.GetValues(key);
-            return values != null && values.Length > 1;
-        }
     }
 
     /// <summary>
@@ -1061,7 +921,7 @@ namespace Aufbauwerk.Net.Asterisk
             // check the response status
             if (expectedResponseStatus == null)
                 throw ExceptionBuilder.NullArgument("expectedResponseStatus");
-            if (!string.Equals(Status, expectedResponseStatus, StringComparison.InvariantCultureIgnoreCase))
+            if (!string.Equals(Status, expectedResponseStatus, StringComparison.OrdinalIgnoreCase))
                 throw ExceptionBuilder.ResponseUnexpected(Status, expectedResponseStatus, Message);
         }
 
@@ -1136,7 +996,7 @@ namespace Aufbauwerk.Net.Asterisk
             if (items.Length == 1)
                 throw ExceptionBuilder.EnumerationCompleteEventMissing();
             CompleteEvent = new AsteriskEvent(items[items.Length - 1]);
-            if (!string.Equals(CompleteEvent.EventName, expectedCompleteEventName, StringComparison.InvariantCultureIgnoreCase))
+            if (!string.Equals(CompleteEvent.EventName, expectedCompleteEventName, StringComparison.OrdinalIgnoreCase))
                 throw ExceptionBuilder.EnumerationCompleteEventMissing();
 
             // get the rest

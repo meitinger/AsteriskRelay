@@ -31,8 +31,8 @@ namespace Aufbauwerk.Asterisk.Relay.Remoting
         /// </summary>
         /// <param name="name">The name of the switch.</param>
         /// <param name="state"><c>true</c> if the switch is to be turned on, <c>false</c> otherwise.</param>
-        /// <exception cref="FaultException<ArgumentNullException>">The given <paramref name="name"/> is <c>null</c>.</exception>
-        /// <exception cref="FaultException<ArgumentException>">No switch with the given <paramref name="name"/> exists or it's empty.</exception>
+        /// <exception cref="FaultException{ArgumentNullException}">The given <paramref name="name"/> is <c>null</c>.</exception>
+        /// <exception cref="FaultException{ArgumentException}">No switch with the given <paramref name="name"/> exists or it's empty.</exception>
         [OperationContract]
         [FaultContract(typeof(ArgumentNullException))]
         [FaultContract(typeof(ArgumentException))]
@@ -43,8 +43,8 @@ namespace Aufbauwerk.Asterisk.Relay.Remoting
         /// </summary>
         /// <param name="name">The name of the switch.</param>
         /// <returns><c>true</c> if the switch is turned on, <c>false</c> otherwise.</returns>
-        /// <exception cref="FaultException<ArgumentNullException>">The given <paramref name="name"/> is <c>null</c>.</exception>
-        /// <exception cref="FaultException<ArgumentException>">No switch with the given <paramref name="name"/> exists or it's empty.</exception>
+        /// <exception cref="FaultException{ArgumentNullException}">The given <paramref name="name"/> is <c>null</c>.</exception>
+        /// <exception cref="FaultException{ArgumentException}">No switch with the given <paramref name="name"/> exists or it's empty.</exception>
         [OperationContract]
         [FaultContract(typeof(ArgumentNullException))]
         [FaultContract(typeof(ArgumentException))]
@@ -94,16 +94,34 @@ namespace Aufbauwerk.Asterisk.Relay.Remoting
             return switchOrNull;
         }
 
+        /// <summary>
+        /// Sets the state of a certain switch.
+        /// </summary>
+        /// <param name="name">The name of the switch.</param>
+        /// <param name="state"><c>true</c> if the switch is to be turned on, <c>false</c> otherwise.</param>
+        /// <exception cref="FaultException{ArgumentNullException}">The given <paramref name="name"/> is <c>null</c>.</exception>
+        /// <exception cref="FaultException{ArgumentException}">No switch with the given <paramref name="name"/> exists or it's empty.</exception>
         public void SetSwitchState(string name, bool state)
         {
             GetSwitch(name).State = state ? Configuration.SwitchState.On : Configuration.SwitchState.Off;
         }
 
+        /// <summary>
+        /// Retrieves the current state of a certain switch.
+        /// </summary>
+        /// <param name="name">The name of the switch.</param>
+        /// <returns><c>true</c> if the switch is turned on, <c>false</c> otherwise.</returns>
+        /// <exception cref="FaultException{ArgumentNullException}">The given <paramref name="name"/> is <c>null</c>.</exception>
+        /// <exception cref="FaultException{ArgumentException}">No switch with the given <paramref name="name"/> exists or it's empty.</exception>
         public bool GetSwitchState(string name)
         {
             return GetSwitch(name).State == Configuration.SwitchState.On;
         }
 
+        /// <summary>
+        /// Retrieves the names of all available switches.
+        /// </summary>
+        /// <returns>An array of names.</returns>
         public string[] GetSwitchNames()
         {
             return Configuration.Switch.All.Select(s => s.Name).ToArray();

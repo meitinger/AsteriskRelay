@@ -120,6 +120,9 @@
   <data name="AsteriskClientAlreadyDisposed" xml:space="preserve">
     <value>The client has already been disposed.</value>
   </data>
+  <data name="AsteriskClientAlreadyEndedIAsyncResult" xml:space="preserve">
+    <value>The async operation was already ended.</value>
+  </data>
   <data name="AsteriskClientFormatString" xml:space="preserve">
     <value>Asterisk Client on {0}</value>
   </data>
@@ -128,12 +131,6 @@
   </data>
   <data name="AsteriskClientNotOwnerOfIAsyncResult" xml:space="preserve">
     <value>The aync operation was initiated by a different client.</value>
-  </data>
-  <data name="AsteriskClientQueriesOutOfRange" xml:space="preserve">
-    <value>At least one simultaneous query must be allowed.</value>
-  </data>
-  <data name="AsyncResultEndedTwice" xml:space="preserve">
-    <value>The async operation was already ended elsewhere.</value>
   </data>
   <data name="EmptyArgument" xml:space="preserve">
     <value>The argument {0} is empty.</value>
@@ -152,7 +149,7 @@
 Additional message: {2}</value>
   </data>
   <data name="ResultSetKeyNotFound" xml:space="preserve">
-    <value>A value with the name "{0}" was not returned in the result set.</value>
+    <value>The returned result set doesn't contain a value with the name "{0}".</value>
   </data>
   <data name="ResultSetKeyNotUnique" xml:space="preserve">
     <value>The returned result set contains multiple value with the name "{0}".</value>

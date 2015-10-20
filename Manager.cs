@@ -67,7 +67,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
         }
 
         private readonly Queue<Configuration.Switch> updates = new Queue<Configuration.Switch>();
-        private readonly ManualResetEvent newUpdates = new ManualResetEvent(false);
+        private readonly AutoResetEvent newUpdates = new AutoResetEvent(false);
         private readonly Configuration.AsteriskManagerInterface configuration;
 
         private AjamServer(Configuration.AsteriskManagerInterface configuration)
@@ -78,7 +78,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
 
         private string BuildVarName(Configuration.Switch s)
         {
-            return string.Format("DEVSTATE({0})", string.Format(configuration.DeviceNameFormat, s.Name));
+            return string.Format("DEVICE_STATE({0})", string.Format(configuration.DeviceNameFormat, s.Name));
         }
 
         private AsteriskAction SetVar(Configuration.Switch s)
@@ -86,6 +86,9 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
             return new AsteriskAction("SetVar") { { "Variable", BuildVarName(s) }, { "Value", ConvertState(s) } };
         }
 
+        /// <summary>
+        /// Performs the actual task.
+        /// </summary>
         protected override void Run()
         {
             // hook up the switch events
@@ -103,7 +106,10 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
                     client.ExecuteNonQuery(new AsteriskAction("Login") { { "Username", configuration.Username }, { "Secret", configuration.Password } });
                     loggedOn = true;
 
-                    // sync the switch state
+                    // clear stale updates and sync the switch states
+                    lock (updates)
+                        updates.Clear();
+                    newUpdates.Reset();
                     foreach (var s in Configuration.Switch.All)
                     {
                         // if the switch wasn't set, try to get the old value
@@ -125,85 +131,81 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
                     }
                     ServiceApplication.LogEvent(EventLogEntryType.Information, Properties.Resources.Manager_SyncComplete, configuration.BaseUri);
 
-                    // initialize the wait handles
-                    var waitEventAction = new AsteriskAction("WaitEvent");
-                    var waitHandles = new Dictionary<WaitHandle, IAsyncResult>();
-                    waitHandles.Add(newUpdates, null);
-                    var waitEvent = client.BeginExecuteEnumeration(waitEventAction, null, null);
-                    waitHandles.Add(waitEvent.AsyncWaitHandle, waitEvent);
+                    // initialize the async vars and enter the main loop
+                    var asyncWaitEvent = client.BeginExecuteEnumeration(new AsteriskAction("WaitEvent"), null, null);
+                    var asyncSetVar = (IAsyncResult)null;
                     while (true)
                     {
                         // wait for something to happen
-                        var handles = waitHandles.Keys.ToArray();
-                        var index = WaitHandle.WaitAny(handles);
-                        var asyncResult = waitHandles[handles[index]];
-                        waitHandles.Remove(handles[index]);
-
-                        // new switch states are available
-                        if (asyncResult == null)
+                        var index = WaitHandle.WaitAny(asyncSetVar == null ? new WaitHandle[] { newUpdates, asyncWaitEvent.AsyncWaitHandle } : new WaitHandle[] { newUpdates, asyncWaitEvent.AsyncWaitHandle, asyncSetVar.AsyncWaitHandle });
+                        switch (index)
                         {
-                            // get the changed switches and reset the event
-                            Configuration.Switch[] changedSwitches;
-                            lock (updates)
-                            {
-                                changedSwitches = updates.ToArray();
-                                updates.Clear();
-                                newUpdates.Reset();
-                            }
+                            // new switch states are available
+                            case 0:
+                                // do nothing if we're still syncing
+                                if (asyncSetVar != null)
+                                    break;
 
-                            // start syncing each new switch state
-                            foreach (var s in changedSwitches)
-                            {
-                                var switchUpdate = client.BeginExecuteNonQuery(SetVar(s), null, s);
-                                waitHandles.Add(switchUpdate.AsyncWaitHandle, switchUpdate);
-                            }
-
-                            // wait for more updates
-                            waitHandles.Add(newUpdates, null);
-                        }
-
-                        // events have been received
-                        else if (asyncResult.AsyncState == null)
-                        {
-                            // handle each relay event
-                            foreach (var relayEvent in client.EndExecuteEnumeration(asyncResult).Where(e => string.Equals(e.EventName, "UserEvent", StringComparison.InvariantCultureIgnoreCase) && string.Equals(e["UserEvent"], "Relay", StringComparison.InvariantCultureIgnoreCase)))
-                            {
-                                // get the switch instance
-                                var switchName = relayEvent["Switch"];
-                                var s = Configuration.Switch.FindByName(switchName);
-                                if (s == null)
+                                // get the next switch
+                                Configuration.Switch switchToUpdate;
+                                lock (updates)
                                 {
-                                    ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownSwitch, configuration.BaseUri, switchName);
-                                    continue;
+                                    // break if there isn't one
+                                    if (updates.Count == 0)
+                                        break;
+                                    switchToUpdate = updates.Dequeue();
                                 }
 
-                                // handle each action
-                                var actionName = relayEvent["Action"];
-                                switch (actionName.ToUpperInvariant())
+                                // sync the next switch
+                                asyncSetVar = client.BeginExecuteNonQuery(SetVar(switchToUpdate), null, null);
+                                break;
+
+                            // events have been received
+                            case 1:
+                                // handle each relay event
+                                foreach (var relayEvent in client.EndExecuteEnumeration(asyncWaitEvent).Where(e => string.Equals(e.EventName, "UserEvent", StringComparison.OrdinalIgnoreCase) && string.Equals(e["UserEvent"], "Relay", StringComparison.OrdinalIgnoreCase)))
                                 {
-                                    case "TURNON":
-                                        s.State = Configuration.SwitchState.On;
-                                        break;
-                                    case "TURNOFF":
-                                        s.State = Configuration.SwitchState.Off;
-                                        break;
-                                    case "TOGGLE":
-                                        s.State = ~s.State;
-                                        break;
-                                    default:
-                                        ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownAction, configuration.BaseUri, switchName, actionName);
+                                    // get the switch instance
+                                    var switchName = relayEvent["Switch"];
+                                    var s = Configuration.Switch.FindByName(switchName);
+                                    if (s == null)
+                                    {
+                                        ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownSwitch, configuration.BaseUri, switchName);
                                         continue;
+                                    }
+
+                                    // handle each action
+                                    var actionName = relayEvent["Action"];
+                                    switch (actionName.ToUpperInvariant())
+                                    {
+                                        case "TURNON":
+                                            s.State = Configuration.SwitchState.On;
+                                            break;
+                                        case "TURNOFF":
+                                            s.State = Configuration.SwitchState.Off;
+                                            break;
+                                        case "TOGGLE":
+                                            s.State = ~s.State;
+                                            break;
+                                        default:
+                                            ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownAction, configuration.BaseUri, switchName, actionName);
+                                            continue;
+                                    }
                                 }
-                            }
 
-                            // wait for more events
-                            waitEvent = client.BeginExecuteEnumeration(waitEventAction, null, null);
-                            waitHandles.Add(waitEvent.AsyncWaitHandle, waitEvent);
+                                // wait for more events
+                                asyncWaitEvent = client.BeginExecuteEnumeration(AsteriskAction.FromIAsyncResult(asyncWaitEvent), null, null);
+                                break;
+
+                            // a switch state was synced
+                            case 2:
+                                // end the operation
+                                client.EndExecuteNonQuery(asyncSetVar);
+                                asyncSetVar = null;
+
+                                // start with the next
+                                goto case 0;
                         }
-
-                        // a switch state was synced
-                        else
-                            client.EndExecuteNonQuery(asyncResult);
                     }
                 }
             }
@@ -215,13 +217,9 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
         {
             // add the switch to the update set
             lock (updates)
-            {
                 if (!updates.Contains((Configuration.Switch)sender))
-                {
                     updates.Enqueue((Configuration.Switch)sender);
-                    newUpdates.Set();
-                }
-            }
+            newUpdates.Set();
         }
     }
 }

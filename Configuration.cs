@@ -29,7 +29,14 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public enum SwitchState : byte
     {
+        /// <summary>
+        /// Indicates that the switch is off (false).
+        /// </summary>
         Off = 0x00,
+
+        /// <summary>
+        /// Indicates that the switch is on (true).
+        /// </summary>
         On = 0xFF
     }
 
@@ -176,6 +183,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         private int retryInterval;
         private Uri baseUri;
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization()
         {
             // check all fields and generate the base uri
@@ -296,7 +306,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
                                 throw new ConfigurationErrorsException(Properties.Resources.Configuration_MissingSwitches);
 
                             // initialize each switch and check for duplicate names
-                            var newSwitches = new SortedDictionary<string, Switch>(StringComparer.InvariantCultureIgnoreCase);
+                            var newSwitches = new SortedDictionary<string, Switch>(StringComparer.OrdinalIgnoreCase);
                             for (var i = 0; i < switchArray.Length; i++)
                             {
                                 var s = switchArray[i];
@@ -341,6 +351,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         private string name = null;
         private bool performedInit = false;
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization()
         {
             // ensure that the switch's name was specified
@@ -412,6 +425,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         private int writeTimeout = System.IO.Ports.SerialPort.InfiniteTimeout;
         private int retryInterval = 0;
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization()
         {
             // ensure that the timeouts are greater than one or infinite
@@ -475,7 +491,7 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
                                 throw new ConfigurationErrorsException(Properties.Resources.Configuration_MissingBoards);
 
                             // initialize each board and check for duplicate port/address pairs
-                            var newBoards = new Dictionary<string, IDictionary<byte, Board>>(StringComparer.InvariantCultureIgnoreCase);
+                            var newBoards = new Dictionary<string, IDictionary<byte, Board>>(StringComparer.OrdinalIgnoreCase);
                             for (var i = 0; i < boardArray.Length; i++)
                             {
                                 var b = boardArray[i];
@@ -555,6 +571,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
                 stateChanged(this, e);
         }
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization()
         {
             // ensure that the port name and board address have been specified
@@ -695,6 +714,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class Relay : UnaryFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public Relay() : base(_ => _) { }
     }
 
@@ -741,6 +763,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             this.method = method;
         }
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization()
         {
             // ensure that both operators are specified, valid and hooked
@@ -754,6 +779,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             }
         }
 
+        /// <summary>
+        /// Use <see cref="Ops"/> instead.
+        /// </summary>
         [XmlElement("Equals", typeof(Equals))]
         [XmlElement("And", typeof(And))]
         [XmlElement("Or", typeof(Or))]
@@ -779,6 +807,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             set { Set(value, ref ops); }
         }
 
+        /// <summary>
+        /// Evaluates the function and returns its result.
+        /// </summary>
         public override bool Value
         {
             get
@@ -802,6 +833,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             this.method = method;
         }
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization()
         {
             // ensure that the operation is present, valid and hooked
@@ -812,6 +846,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             op.ValueChanged += (s, e) => OnValueChanged(e);
         }
 
+        /// <summary>
+        /// Use <see cref="Op"/> instead.
+        /// </summary>
         [XmlElement("Equals", typeof(Equals))]
         [XmlElement("And", typeof(And))]
         [XmlElement("Or", typeof(Or))]
@@ -837,6 +874,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             set { Set(value, ref op); }
         }
 
+        /// <summary>
+        /// Evaluates the function and returns its result.
+        /// </summary>
         public override bool Value
         {
             get
@@ -859,8 +899,14 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             this.value = value;
         }
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization() { }
 
+        /// <summary>
+        /// Evaluates the function and returns its result.
+        /// </summary>
         public override bool Value
         {
             get
@@ -876,6 +922,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class Equals : VariadicFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public Equals() : base((op1, op2) => op1 == op2) { }
     }
 
@@ -884,6 +933,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class And : VariadicFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public And() : base((op1, op2) => op1 & op2) { }
     }
 
@@ -892,6 +944,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class Or : VariadicFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public Or() : base((op1, op2) => op1 | op2) { }
     }
 
@@ -900,6 +955,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class Xor : VariadicFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public Xor() : base((op1, op2) => op1 ^ op2) { }
     }
 
@@ -908,6 +966,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class Not : UnaryFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public Not() : base(op => !op) { }
     }
 
@@ -916,6 +977,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class AlwaysOn : ConstantFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public AlwaysOn() : base(true) { }
     }
 
@@ -924,6 +988,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
     /// </summary>
     public sealed class AlwaysOff : ConstantFunction
     {
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
         public AlwaysOff() : base(false) { }
     }
 
@@ -935,6 +1002,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
         private string name = null;
         private Switch switchRef;
 
+        /// <summary>
+        /// Performs the actual initialization within the lock.
+        /// </summary>
         protected override void PerformInitialization()
         {
             // ensure that the switch reference exists and hook up its state changed event
@@ -956,6 +1026,9 @@ namespace Aufbauwerk.Asterisk.Relay.Configuration
             set { Set(value == null ? null : value.Trim(), ref name); }
         }
 
+        /// <summary>
+        /// Evaluates the function and returns its result.
+        /// </summary>
         public override bool Value
         {
             get

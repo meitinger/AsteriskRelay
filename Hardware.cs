@@ -194,6 +194,9 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
             return false;
         }
 
+        /// <summary>
+        /// Performs the actual task.
+        /// </summary>
         protected override void Run()
         {
         NewSerialPort:

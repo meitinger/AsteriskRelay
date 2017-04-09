@@ -1,4 +1,4 @@
-﻿/* Copyright (C) 2009-2014, Manuel Meitinger
+﻿/* Copyright (C) 2009-2017, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using Aufbauwerk.Net.Asterisk;
-using Aufbauwerk.ServiceProcess;
 
 namespace Aufbauwerk.Asterisk.Relay.Manager
 {
@@ -46,7 +45,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
             }
         }
 
-        internal static void Start(object sender, Aufbauwerk.ServiceProcess.StartEventArgs e)
+        internal static void StartAll()
         {
             // create and start all defined manager clients
             instances = new List<AjamServer>();
@@ -58,7 +57,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
             }
         }
 
-        internal static void Stop(object sender, EventArgs e)
+        internal static void StopAll()
         {
             // stop the manager client
             if (instances != null)
@@ -71,7 +70,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
         private readonly Configuration.AsteriskManagerInterface configuration;
 
         private AjamServer(Configuration.AsteriskManagerInterface configuration)
-            : base(string.Format(Properties.Resources.Manager_BackgroundTaskName, configuration.BaseUri), configuration.RetryInterval, new Guid("CAC88484-7515-4C03-82E6-71A87ABAC361"))
+            : base(string.Format(Properties.Resources.Manager_BackgroundTaskName, configuration.BaseUri), configuration.RetryInterval)
         {
             this.configuration = configuration;
         }
@@ -129,7 +128,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
                         // set the new one
                         client.ExecuteNonQuery(SetVar(s));
                     }
-                    ServiceApplication.LogEvent(EventLogEntryType.Information, Properties.Resources.Manager_SyncComplete, configuration.BaseUri);
+                    Program.LogEvent(EventLogEntryType.Information, Properties.Resources.Manager_SyncComplete, configuration.BaseUri);
 
                     // initialize the async vars and enter the main loop
                     var asyncWaitEvent = client.BeginExecuteEnumeration(new AsteriskAction("WaitEvent"), null, null);
@@ -170,7 +169,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
                                     var s = Configuration.Switch.FindByName(switchName);
                                     if (s == null)
                                     {
-                                        ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownSwitch, configuration.BaseUri, switchName);
+                                        Program.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownSwitch, configuration.BaseUri, switchName);
                                         continue;
                                     }
 
@@ -188,7 +187,7 @@ namespace Aufbauwerk.Asterisk.Relay.Manager
                                             s.State = ~s.State;
                                             break;
                                         default:
-                                            ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownAction, configuration.BaseUri, switchName, actionName);
+                                            Program.LogEvent(EventLogEntryType.Warning, Properties.Resources.Manager_UnknownAction, configuration.BaseUri, switchName, actionName);
                                             continue;
                                     }
                                 }

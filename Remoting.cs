@@ -1,4 +1,4 @@
-﻿/* Copyright (C) 2009-2014, Manuel Meitinger
+﻿/* Copyright (C) 2009-2017, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -66,14 +66,14 @@ namespace Aufbauwerk.Asterisk.Relay.Remoting
     {
         private static ServiceHost host;
 
-        internal static void Start(object sender, Aufbauwerk.ServiceProcess.StartEventArgs e)
+        internal static void Start()
         {
             host = new ServiceHost(new Service());
-            e.RequestAdditionalTime(host.OpenTimeout);
+            Program.RequestAdditionalTime(host.OpenTimeout);
             host.Open();
         }
 
-        internal static void Stop(object sender, EventArgs e)
+        internal static void Stop()
         {
             if (host != null)
                 host.Abort();

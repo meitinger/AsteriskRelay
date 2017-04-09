@@ -1,4 +1,4 @@
-﻿/* Copyright (C) 2009-2014, Manuel Meitinger
+﻿/* Copyright (C) 2009-2017, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Threading;
-using Aufbauwerk.ServiceProcess;
 
 namespace Aufbauwerk.Asterisk.Relay.Hardware
 {
@@ -147,7 +146,7 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
     {
         private static ICollection<Port> ports;
 
-        internal static void Start(object sender, Aufbauwerk.ServiceProcess.StartEventArgs e)
+        internal static void StartAll()
         {
             // create and start all configured ports
             ports = new List<Port>();
@@ -159,7 +158,7 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
             }
         }
 
-        internal static void Stop(object sender, EventArgs e)
+        internal static void StopAll()
         {
             // stop all started ports
             if (ports != null)
@@ -171,7 +170,7 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
         private readonly string name;
 
         private Port(string name)
-            : base(string.Format(Properties.Resources.Hardware_BackgroundTaskName, name), Configuration.SerialPort.Settings.RetryInterval, new Guid("4d36e978-e325-11ce-bfc1-08002be10318"))
+            : base(string.Format(Properties.Resources.Hardware_BackgroundTaskName, name), Configuration.SerialPort.Settings.RetryInterval)
         {
             this.name = name;
         }
@@ -182,8 +181,8 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
             for (var tries = 0; tries < 3; tries++)
             {
                 try { Command.SetPort(port, address, state); return true; }
-                catch (TimeoutException) { ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_OperationTimedOut, port.PortName); }
-                catch (InvalidDataException e) { ServiceApplication.LogEvent(EventLogEntryType.Warning, e.Message); }
+                catch (TimeoutException) { Program.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_OperationTimedOut, port.PortName); }
+                catch (InvalidDataException e) { Program.LogEvent(EventLogEntryType.Warning, e.Message); }
                 catch (IOException e)
                 {
                     // abort immediatelly, since there might be something wrong with the port alltogether
@@ -227,8 +226,8 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
                 for (var retry = 0; ; retry++)
                 {
                     try { boardsCount = Command.Setup(port); break; }
-                    catch (TimeoutException) { ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_OperationTimedOut, port.PortName); }
-                    catch (InvalidDataException e) { ServiceApplication.LogEvent(EventLogEntryType.Warning, e.Message); }
+                    catch (TimeoutException) { Program.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_OperationTimedOut, port.PortName); }
+                    catch (InvalidDataException e) { Program.LogEvent(EventLogEntryType.Warning, e.Message); }
                     catch (IOException e)
                     {
                         // log the error and wait if we've just opened the port
@@ -244,7 +243,7 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
                     if (retry > 1)
                         Wait();
                 }
-                ServiceApplication.LogEvent(EventLogEntryType.Information, Properties.Resources.Hardware_SetupComplete, name, boardsCount);
+                Program.LogEvent(EventLogEntryType.Information, Properties.Resources.Hardware_SetupComplete, name, boardsCount);
 
                 // set the initial state of each board
                 for (var i = (byte)1; i <= boardsCount; i++)
@@ -257,12 +256,12 @@ namespace Aufbauwerk.Asterisk.Relay.Hardware
                             goto NewSerialPort;
                     }
                     else
-                        ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_BoardConfigurationMissing, name, i);
+                        Program.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_BoardConfigurationMissing, name, i);
                 }
 
                 // log warnings for all additional boards
                 foreach (var board in Configuration.Board.All.Where(b => b.Port == name && b.Address > boardsCount))
-                    ServiceApplication.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_BoardAddressOutOfRange, name, board.Address);
+                    Program.LogEvent(EventLogEntryType.Warning, Properties.Resources.Hardware_BoardAddressOutOfRange, name, board.Address);
 
                 // wait for switch events
                 while (true)

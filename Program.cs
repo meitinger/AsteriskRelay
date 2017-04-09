@@ -1,4 +1,4 @@
-﻿/* Copyright (C) 2009-2014, Manuel Meitinger
+﻿/* Copyright (C) 2009-2017, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,8 +16,9 @@
 
 using System;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.ServiceProcess;
 using System.Threading;
-using Aufbauwerk.ServiceProcess;
 
 namespace Aufbauwerk.Asterisk.Relay
 {
@@ -29,7 +30,6 @@ namespace Aufbauwerk.Asterisk.Relay
         private readonly object retryObject = new object();
         private readonly string name;
         private readonly int retryInterval;
-        private readonly Guid[] hardwareClasses;
         private readonly Thread thread;
 
         /// <summary>
@@ -37,35 +37,22 @@ namespace Aufbauwerk.Asterisk.Relay
         /// </summary>
         /// <param name="name">The user-friendly name.</param>
         /// <param name="retryInterval">The amount of milliseconds to wait upon an error or 0 to wait indefinitely.</param>
-        /// <param name="hardwareClasses">The hardware classes <see cref="System.Guid"/>s upon which the task relies on.</param>
-        /// <exception cref="System.ArgumentNullException"><paramref name="name"/> or <paramref name="hardwareClasses"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentNullException"><paramref name="name"/> is <c>null</c>.</exception>
         /// <exception cref="System.ArgumentOutOfRangeException"><paramref name="retryInterval"/> is negative.</exception>
-        public BackgroundTask(string name, int retryInterval, params Guid[] hardwareClasses)
+        public BackgroundTask(string name, int retryInterval)
         {
             // check the input and create the thread
             if (name == null)
                 throw new ArgumentNullException("name");
-            if (hardwareClasses == null)
-                throw new ArgumentNullException("hardwareClasses");
             if (retryInterval < 0)
                 throw new ArgumentOutOfRangeException("retryInterval");
             this.name = name;
             this.retryInterval = retryInterval;
-            var hardwareClassesCopy = (Guid[])hardwareClasses.Clone();
-            Array.Sort(hardwareClassesCopy);
-            this.hardwareClasses = hardwareClassesCopy;
             this.thread = new Thread(Run)
             {
                 IsBackground = true,
                 Name = name,
             };
-        }
-
-        private void OnDeviceEvent(object sender, DeviceEventArgs e)
-        {
-            // initiate a retry if the proper hardware was plugged in
-            if (e.Type == DeviceEventType.Arrival && e.DeviceType == DeviceEventDeviceType.Interface && Array.BinarySearch(hardwareClasses, ((InterfaceDeviceEventArgs)e).ClassGuid) > -1)
-                EndWait();
         }
 
         /// <summary>
@@ -74,7 +61,7 @@ namespace Aufbauwerk.Asterisk.Relay
         /// <param name="e">The <see cref="System.Exception"/> that occurred.</param>
         protected void Log(Exception e)
         {
-            ServiceApplication.LogEvent(EventLogEntryType.Error, Properties.Resources.Program_BackgroundTaskException, name, e.Message);
+            Program.LogEvent(EventLogEntryType.Error, Properties.Resources.Program_BackgroundTaskException, name, e.Message);
         }
 
         /// <summary>
@@ -116,9 +103,7 @@ namespace Aufbauwerk.Asterisk.Relay
         /// <exception cref="System.Threading.ThreadStateException">The task has already been started.</exception>
         public void Start()
         {
-            // start the thread and hook the device event
             thread.Start();
-            ServiceApplication.DeviceEvent += OnDeviceEvent;
         }
 
         /// <summary>
@@ -126,30 +111,157 @@ namespace Aufbauwerk.Asterisk.Relay
         /// </summary>
         public void Stop()
         {
-            // abort the thread and unhook the device event
             thread.Abort();
-            ServiceApplication.DeviceEvent -= OnDeviceEvent;
         }
     }
 
     internal static class Program
     {
+        private static readonly Service service = new Service();
+
+        private class Service : ServiceBase
+        {
+            internal Service()
+            {
+                // specify the name and inform SCM that the service can be stopped
+                ServiceName = "AsteriskRelay";
+                CanStop = true;
+            }
+
+            protected override void OnStart(string[] args)
+            {
+                // set a non-zero exit code to indicate failure if something goes wrong and start
+                ExitCode = ~0;
+                Program.Start();
+            }
+
+            protected override void OnStop()
+            {
+                // stop and reset the exit code to indicate success
+                Program.Stop();
+                ExitCode = 0;
+            }
+        }
+
+        private static void Start()
+        {
+            // start all threads
+            Hardware.Port.StartAll();
+            if (Properties.Settings.Default.RemotingEnabled)
+                Remoting.Service.Start();
+            if (Properties.Settings.Default.AsteriskEnabled)
+                Manager.AjamServer.StartAll();
+        }
+
+        private static void Stop()
+        {
+            // stop all threads
+            Hardware.Port.StopAll();
+            if (Properties.Settings.Default.RemotingEnabled)
+                Remoting.Service.Stop();
+            if (Properties.Settings.Default.AsteriskEnabled)
+                Manager.AjamServer.StopAll();
+        }
+
+        private static void UnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            // properly log the exception and terminate
+            if (e.ExceptionObject is Exception)
+            {
+                try { LogEvent(EventLogEntryType.Error, e.ExceptionObject.ToString()); }
+                catch { return; }
+                if (e.IsTerminating)
+                    Environment.Exit(Marshal.GetHRForException((Exception)e.ExceptionObject));
+            }
+        }
+
         private static void Main(string[] args)
         {
-            // register all start/stop handlers and run the service
-            ServiceApplication.Start += Hardware.Port.Start;
-            ServiceApplication.Stop += Hardware.Port.Stop;
-            if (Properties.Settings.Default.RemotingEnabled)
+            // handle all uncaught exceptions
+            AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(UnhandledException);
+
+#if DEBUG
+            // repeat start/stop
+            do
             {
-                ServiceApplication.Start += Remoting.Service.Start;
-                ServiceApplication.Stop += Remoting.Service.Stop;
+                lock (service)
+                    Console.WriteLine("Starting...");
+                Start();
+                lock (service)
+                    Console.WriteLine("Started. Press ENTER to stop.");
+                if (Console.ReadLine() == null)
+                    break;
+                lock (service)
+                    Console.WriteLine("Stopping...");
+                Stop();
+                lock (service)
+                    Console.WriteLine("Stopped. Press ENTER to start.");
             }
-            if (Properties.Settings.Default.AsteriskEnabled)
+            while (Console.ReadLine() != null);
+#else
+            // run the service
+            ServiceBase.Run(service);
+#endif
+        }
+
+        internal static void RequestAdditionalTime(TimeSpan timeSpan)
+        {
+#if DEBUG
+            // notify the user
+            lock (service)
             {
-                ServiceApplication.Start += Manager.AjamServer.Start;
-                ServiceApplication.Stop += Manager.AjamServer.Stop;
+                var previousColor = Console.ForegroundColor;
+                Console.ForegroundColor = ConsoleColor.White;
+                try { Console.WriteLine("Request additional {0}.", timeSpan); }
+                finally { Console.ForegroundColor = previousColor; }
             }
-            ServiceApplication.Run();
+#else
+            // request additional time from the SCM
+            service.RequestAdditionalTime((int)timeSpan.TotalMilliseconds);
+#endif
+        }
+
+        internal static void LogEvent(EventLogEntryType type, string message)
+        {
+#if DEBUG
+            // determine the color and write to console
+            ConsoleColor color;
+            switch (type)
+            {
+                case EventLogEntryType.FailureAudit:
+                    color = ConsoleColor.Red;
+                    goto case EventLogEntryType.SuccessAudit;
+                case EventLogEntryType.SuccessAudit:
+                    message = "[AUDIT] " + message;
+                    goto case EventLogEntryType.Information;
+                case EventLogEntryType.Error:
+                    color = ConsoleColor.Red;
+                    break;
+                case EventLogEntryType.Warning:
+                    color = ConsoleColor.Yellow;
+                    break;
+                case EventLogEntryType.Information:
+                    color = ConsoleColor.Green;
+                    break;
+                default:
+                    throw new System.ComponentModel.InvalidEnumArgumentException("type", (int)type, typeof(EventLogEntryType));
+            }
+            lock (service)
+            {
+                var previousColor = Console.ForegroundColor;
+                Console.ForegroundColor = color;
+                try { Console.WriteLine(message); }
+                finally { Console.ForegroundColor = previousColor; }
+            }
+#else
+            // write the log entry
+            service.EventLog.WriteEntry(message, type);
+#endif
+        }
+
+        internal static void LogEvent(EventLogEntryType type, string format, params object[] args)
+        {
+            LogEvent(type, string.Format(format, args));
         }
     }
 }

@@ -35,6 +35,7 @@
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.ServiceModel" />
+    <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
@@ -55,7 +56,6 @@
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
     <Compile Include="Remoting.cs" />
-    <Compile Include="ServiceApplication.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config">
